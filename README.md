@@ -1,4 +1,4 @@
-# Check Media (Lenient)
+# Check Media (Extended)
 
 Find media files in your Anki collection that may no longer be used by any of your notes.
 
@@ -9,7 +9,7 @@ Some notes refer to pictures or audio using Markdown, JavaScript, or custom temp
 ## How to check your media
 
 1. Open your Anki profile.
-2. From the **Tools** menu, choose **Check Media (Lenient)**.
+2. From the **Tools** menu, choose **Check Media (Extended)**.
 3. Wait for the scan to finish. You can cancel it while it is running.
 4. Review the results window. It shows a summary and a copyable list of files that may be unused.
 

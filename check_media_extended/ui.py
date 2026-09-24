@@ -1,4 +1,4 @@
-"""Qt results window for the lenient media checker."""
+"""Qt results window for the extended media checker."""
 
 from __future__ import annotations
 
@@ -46,7 +46,7 @@ class ResultsDialog(QDialog):
         on_open_trash: Callable[[], None],
         on_empty_trash: Callable[[], None],
     ) -> None:
-        self.setWindowTitle("Check Media (Lenient)")
+        self.setWindowTitle("Check Media (Extended)")
         self.setMinimumSize(600, 420)
         layout = QVBoxLayout(self)
 

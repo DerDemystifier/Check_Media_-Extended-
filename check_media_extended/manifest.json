@@ -1,6 +1,6 @@
 {
-  "name": "Check Media (Lenient)",
-  "package": "better_check_media_lenient",
+  "name": "Check Media (Extended)",
+  "package": "check_media_extended",
   "ankiweb_id": "",
   "author": "",
   "version": "1.0.0",

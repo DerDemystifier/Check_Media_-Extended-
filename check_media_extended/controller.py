@@ -1,4 +1,4 @@
-"""Background orchestration for the lenient media scan and trash action."""
+"""Background orchestration for the extended media scan and trash action."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ from .matcher import MatcherConfig, ScanCancelled, ScanResult, scan_collection
 from .ui import ResultsDialog
 
 
-class LenientMediaChecker:
+class ExtendedMediaChecker:
     """Owns one scan at a time and keeps all Qt interactions on the UI thread."""
 
     def __init__(self, mw: Any) -> None:
@@ -32,7 +32,7 @@ class LenientMediaChecker:
             showWarning("Open a profile before checking media.", parent=self.mw)
             return
         self._cancelled.clear()
-        self._progress_dialog = self.mw.progress.start(label="Preparing lenient media check…")
+        self._progress_dialog = self.mw.progress.start(label="Preparing extended media check…")
         self._progress_timer = QTimer(self.mw)
         self._progress_timer.setInterval(100)
         qconnect(self._progress_timer.timeout, self._check_for_cancellation)

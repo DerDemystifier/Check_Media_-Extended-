@@ -1,4 +1,4 @@
-"""Rules for media that the lenient checker must never flag."""
+"""Rules for media that the extended checker must never flag."""
 
 from __future__ import annotations
 

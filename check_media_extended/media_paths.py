@@ -1,4 +1,4 @@
-"""Paths used by the lenient media checker."""
+"""Paths used by the extended media checker."""
 
 from pathlib import Path
 

@@ -1,4 +1,4 @@
-"""Raw-field matching pipeline for the lenient media checker.
+"""Raw-field matching pipeline for the extended media checker.
 
 The Anki search phase is deliberately only a prefilter.  The final verdict is
 always made with Python's case-sensitive substring operator on unrendered note
