@@ -6,10 +6,11 @@ import os
 import threading
 from collections.abc import Sequence
 from concurrent.futures import Future
+from typing import Any
 
 from aqt.operations import QueryOp
 from aqt.qt import QTimer, qconnect
-from aqt.utils import askUser, showInfo, showWarning
+from aqt.utils import askUser, openFolder, showInfo, showWarning
 
 from .matcher import MatcherConfig, ScanCancelled, ScanResult, scan_collection
 from .ui import ResultsDialog
@@ -18,7 +19,7 @@ from .ui import ResultsDialog
 class LenientMediaChecker:
     """Owns one scan at a time and keeps all Qt interactions on the UI thread."""
 
-    def __init__(self, mw: object) -> None:
+    def __init__(self, mw: Any) -> None:
         self.mw = mw
         self._cancelled = threading.Event()
         self._progress_timer: QTimer | None = None
@@ -68,7 +69,14 @@ class LenientMediaChecker:
             showWarning(str(exception), parent=self.mw)
             return
         result, media_dir = future.result()
-        self._dialog = ResultsDialog(self.mw, result.unused, media_dir, self.trash_files)
+        self._dialog = ResultsDialog(
+            self.mw,
+            result,
+            media_dir,
+            self.trash_files,
+            self.open_media_collection,
+            self.empty_trash,
+        )
         self._dialog.exec()
 
     def trash_files(self, filenames: Sequence[str]) -> None:
@@ -83,7 +91,7 @@ class LenientMediaChecker:
         ):
             return
 
-        def trash(col: object) -> list[str]:
+        def trash(col: Any) -> list[str]:
             col.media.trash_files(filenames)
             return filenames
 
@@ -101,6 +109,24 @@ class LenientMediaChecker:
             "They are recoverable until the trash is emptied.",
             parent=self.mw,
         )
+
+    def open_media_collection(self) -> None:
+        openFolder(self.mw.col.media.dir())
+
+    def empty_trash(self) -> None:
+        if not askUser(
+            "Permanently delete all files in Anki's media trash?\n\n"
+            "This cannot be undone.",
+            parent=self.mw,
+            defaultno=True,
+        ):
+            return
+
+        QueryOp(
+            parent=self.mw,
+            op=lambda col: col.media.empty_trash(),
+            success=lambda _: showInfo("Anki's media trash has been emptied.", parent=self.mw),
+        ).with_progress("Emptying media trash…").run_in_background()
 
     def _finish_progress(self) -> None:
         if self._progress_timer:

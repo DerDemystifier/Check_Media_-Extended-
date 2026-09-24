@@ -49,7 +49,19 @@ class MatcherTests(unittest.TestCase):
             {1},
         )
         result = scan_collection(col, ["markdown.png", "script.mp3", "unused.mp3"])
+        self.assertEqual(result.media_file_count, 3)
+        self.assertEqual(result.exempted_count, 0)
+        self.assertEqual(result.matched_note_count, 1)
         self.assertEqual(result.unused, ("unused.mp3",))
+
+    def test_scan_result_reports_exempted_media(self) -> None:
+        result = scan_collection(
+            FakeCollection({}, set()),
+            ["_internal.png", "latex-generated.svg", "unused.png"],
+        )
+        self.assertEqual(result.media_file_count, 3)
+        self.assertEqual(result.exempted_count, 2)
+        self.assertEqual(result.candidates, ("unused.png",))
 
     def test_final_match_is_case_sensitive(self) -> None:
         col = FakeCollection({1: FakeNote(["<img src='Photo.PNG'>"])}, {1})

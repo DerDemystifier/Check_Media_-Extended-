@@ -51,6 +51,8 @@ class MatcherConfig:
 
 @dataclass(frozen=True)
 class ScanResult:
+    media_file_count: int
+    exempted_count: int
     candidates: tuple[str, ...]
     unused: tuple[str, ...]
     matched_note_count: int
@@ -118,7 +120,8 @@ def scan_collection(
     case-sensitive exact substring check.
     """
 
-    candidates = tuple(filter_candidates(filenames))
+    media_filenames = tuple(filenames)
+    candidates = tuple(filter_candidates(media_filenames))
     batches = build_batches(candidates, config)
     matched_note_ids: set[int] = set()
     total_batches = len(batches)
@@ -147,7 +150,13 @@ def scan_collection(
         if progress and (index == verification_total or index % update_every == 0):
             progress(f"Verifying filenames: {index} of {verification_total}…")
 
-    return ScanResult(candidates, tuple(unused), len(matched_note_ids))
+    return ScanResult(
+        media_file_count=len(media_filenames),
+        exempted_count=len(media_filenames) - len(candidates),
+        candidates=candidates,
+        unused=tuple(unused),
+        matched_note_count=len(matched_note_ids),
+    )
 
 
 def _raise_if_cancelled(cancelled: CancelCallback | None) -> None:
