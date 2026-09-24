@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import unittest
 from dataclasses import dataclass
+from pathlib import Path
 
 import _addon_path  # noqa: F401
 from exemptions import filter_candidates
+from media_paths import media_trash_directory
 from matcher import MatcherConfig, build_batches, build_regex_query, scan_collection
 
 
@@ -74,6 +76,13 @@ class MatcherTests(unittest.TestCase):
         self.assertGreater(len(batches), 1)
         self.assertTrue(all(len(batch) <= 100 for batch in batches))
         self.assertTrue(all(len(build_regex_query(batch)) <= 800 for batch in batches))
+
+
+class MediaPathTests(unittest.TestCase):
+    def test_trash_is_sibling_of_media_directory(self) -> None:
+        media_directory = Path("profile") / "collection.media"
+        expected = Path("profile") / "media.trash"
+        self.assertEqual(media_trash_directory(str(media_directory)), str(expected))
 
 
 if __name__ == "__main__":

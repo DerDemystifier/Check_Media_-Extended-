@@ -30,18 +30,20 @@ class ResultsDialog(QDialog):
         media_dir: str,
         on_trash: Callable[[list[str]], None],
         on_open_media: Callable[[], None],
+        on_open_trash: Callable[[], None],
         on_empty_trash: Callable[[], None],
     ) -> None:
         super().__init__(parent)
         self._on_trash = on_trash
         self._filenames = list(result.unused)
-        self._set_up_ui(result, media_dir, on_open_media, on_empty_trash)
+        self._set_up_ui(result, media_dir, on_open_media, on_open_trash, on_empty_trash)
 
     def _set_up_ui(
         self,
         result: ScanResult,
         media_dir: str,
         on_open_media: Callable[[], None],
+        on_open_trash: Callable[[], None],
         on_empty_trash: Callable[[], None],
     ) -> None:
         self.setWindowTitle("Check Media (Lenient)")
@@ -58,7 +60,7 @@ class ResultsDialog(QDialog):
             f"Media files scanned: {result.media_file_count}<br>"
             f"Exempted: {result.exempted_count} (_-prefixed or generated LaTeX)<br>"
             f"Candidates checked: {len(result.candidates)}<br>"
-            f"Notes inspected after search prefilter: {result.matched_note_count}<br>"
+            f"Notes referencing media in the collection: {result.matched_note_count}<br>"
             f"Unused: {len(self._filenames)} ({_format_size(self._unused_bytes)})"
         )
         self.summary.setWordWrap(True)
@@ -73,15 +75,18 @@ class ResultsDialog(QDialog):
         buttons = QDialogButtonBox()
         self.delete_unused = QPushButton("Delete Unused")
         self.open_media = QPushButton("Open Media Collection")
+        self.open_trash = QPushButton("Open Trash Bin")
         self.empty_trash = QPushButton("Empty Trash")
         buttons.addButton(QDialogButtonBox.StandardButton.Close)
         buttons.addButton(self.delete_unused, QDialogButtonBox.ButtonRole.DestructiveRole)
         buttons.addButton(self.open_media, QDialogButtonBox.ButtonRole.ActionRole)
+        buttons.addButton(self.open_trash, QDialogButtonBox.ButtonRole.ActionRole)
         buttons.addButton(self.empty_trash, QDialogButtonBox.ButtonRole.ActionRole)
         layout.addWidget(buttons)
 
         qconnect(self.delete_unused.clicked, lambda: self._on_trash(self._filenames))
         qconnect(self.open_media.clicked, on_open_media)
+        qconnect(self.open_trash.clicked, on_open_trash)
         qconnect(self.empty_trash.clicked, on_empty_trash)
         qconnect(buttons.rejected, self.reject)
         self._update_delete_button()

@@ -12,6 +12,7 @@ from aqt.operations import QueryOp
 from aqt.qt import QTimer, qconnect
 from aqt.utils import askUser, openFolder, showInfo, showWarning
 
+from .media_paths import media_trash_directory
 from .matcher import MatcherConfig, ScanCancelled, ScanResult, scan_collection
 from .ui import ResultsDialog
 
@@ -75,6 +76,7 @@ class LenientMediaChecker:
             media_dir,
             self.trash_files,
             self.open_media_collection,
+            self.open_trash_bin,
             self.empty_trash,
         )
         self._dialog.exec()
@@ -112,6 +114,11 @@ class LenientMediaChecker:
 
     def open_media_collection(self) -> None:
         openFolder(self.mw.col.media.dir())
+
+    def open_trash_bin(self) -> None:
+        trash_directory = media_trash_directory(self.mw.col.media.dir())
+        os.makedirs(trash_directory, exist_ok=True)
+        openFolder(trash_directory)
 
     def empty_trash(self) -> None:
         if not askUser(
