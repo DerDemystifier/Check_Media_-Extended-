@@ -1,5 +1,5 @@
 {
-  "batch_size": 200,
-  "max_regex_length": 10000,
+  "batch_size": 300,
+  "max_regex_length": 24000,
   "additional_paths": []
 }

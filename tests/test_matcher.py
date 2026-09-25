@@ -3,8 +3,10 @@ from __future__ import annotations
 import unittest
 from dataclasses import dataclass
 from pathlib import Path
+from unittest.mock import patch
 
 import _addon_path  # noqa: F401
+import matcher
 from exemptions import filter_candidates
 from media_paths import media_trash_directory
 from matcher import (
@@ -139,6 +141,127 @@ class MatcherTests(unittest.TestCase):
         self.assertGreater(len(batches), 1)
         self.assertTrue(all(len(batch) <= 100 for batch in batches))
         self.assertTrue(all(len(build_regex_query(batch)) <= 800 for batch in batches))
+
+    def test_extreme_config_values_are_bounded_for_count_and_query_length(self) -> None:
+        config = MatcherConfig(batch_size=1_000, max_regex_length=80_000)
+        short_terms = [f"asset-{index:04d}.png" for index in range(700)]
+        short_batches = build_batches(short_terms, config)
+
+        self.assertTrue(all(len(batch) <= 300 for batch in short_batches))
+        self.assertTrue(
+            all(len(build_regex_query(batch)) <= 24_000 for batch in short_batches)
+        )
+
+        long_terms = [f"asset-{index:04d}-{'x' * 100}.png" for index in range(260)]
+        long_batches = build_batches(long_terms, config)
+
+        self.assertTrue(all(len(batch) < 300 for batch in long_batches))
+        self.assertTrue(
+            all(len(build_regex_query(batch)) <= 24_000 for batch in long_batches)
+        )
+
+    def test_search_progress_reports_effective_batch_size(self) -> None:
+        progress: list[str] = []
+        scan_collection(
+            FakeCollection({}, set()),
+            [f"asset-{index:04d}.png" for index in range(301)],
+            config=MatcherConfig(batch_size=1_000, max_regex_length=80_000),
+            progress=progress.append,
+        )
+
+        self.assertTrue(
+            any("Applying safe query ceilings" in message for message in progress)
+        )
+        self.assertTrue(
+            any(
+                message.startswith("Searching batch 1 (300 terms, ")
+                for message in progress
+            )
+        )
+
+    def test_build_batches_escapes_each_term_once(self) -> None:
+        filenames = [f"asset-{index}.png" for index in range(10)]
+
+        with patch.object(
+            matcher, "_escaped_filename", wraps=matcher._escaped_filename
+        ) as escape:
+            batches = build_batches(
+                filenames, MatcherConfig(batch_size=4, max_regex_length=1_000)
+            )
+
+        self.assertEqual([name for batch in batches for name in batch], filenames)
+        self.assertEqual(escape.call_count, len(filenames))
+
+    def test_iter_batches_yields_before_consuming_remaining_terms(self) -> None:
+        consumed: list[int] = []
+
+        def terms():
+            for index in range(5):
+                consumed.append(index)
+                yield f"asset-{index}.png"
+
+        batches = matcher.iter_batches(
+            terms(), MatcherConfig(batch_size=2, max_regex_length=1_000)
+        )
+
+        self.assertEqual(next(batches), ["asset-0.png", "asset-1.png"])
+        self.assertEqual(consumed, [0, 1])
+
+    def test_scan_searches_first_batch_before_escaping_all_terms(self) -> None:
+        filenames = [f"asset-{index}.png" for index in range(10)]
+        collection = FakeCollection({}, set())
+        original_find_notes = collection.find_notes
+        escape_counts_at_search: list[int] = []
+
+        with patch.object(
+            matcher, "_escaped_filename", wraps=matcher._escaped_filename
+        ) as escape:
+            def record_search(query: str) -> list[int]:
+                escape_counts_at_search.append(escape.call_count)
+                return original_find_notes(query)
+
+            collection.find_notes = record_search
+            scan_collection(
+                collection,
+                filenames,
+                config=MatcherConfig(batch_size=2, max_regex_length=1_000),
+            )
+
+        self.assertEqual(escape_counts_at_search[0], 4)
+        self.assertEqual(len(escape_counts_at_search), 5)
+
+    def test_scan_reports_progress_during_large_batch_preparation(self) -> None:
+        progress: list[str] = []
+        scan_collection(
+            FakeCollection({}, set()),
+            [f"asset-{index:04d}.png" for index in range(1_000)],
+            config=MatcherConfig(batch_size=2_000, max_regex_length=80_000),
+            progress=progress.append,
+        )
+
+        preparing = "Preparing search terms: 1000 files scanned…"
+        self.assertIn(preparing, progress)
+        searching_indices = [
+            index
+            for index, message in enumerate(progress)
+            if message.startswith("Searching batch ")
+        ]
+        self.assertTrue(searching_indices)
+        searching_index = searching_indices[-1]
+        self.assertLess(progress.index(preparing), searching_index)
+
+    def test_scan_checks_cancellation_during_batch_preparation(self) -> None:
+        collection = FakeCollection({}, set())
+
+        with self.assertRaises(matcher.ScanCancelled):
+            scan_collection(
+                collection,
+                [f"asset-{index}.png" for index in range(300)],
+                config=MatcherConfig(batch_size=500, max_regex_length=80_000),
+                cancelled=lambda: True,
+            )
+
+        self.assertEqual(collection.queries, [])
 
     def test_expanded_nested_search_terms_respect_batch_limits(self) -> None:
         filenames = [f"assets/tts/line-{index:04d}.mp3" for index in range(300)]

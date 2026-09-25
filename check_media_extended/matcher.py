@@ -9,18 +9,23 @@ Anki's more permissive search semantics.
 from __future__ import annotations
 
 import re
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass
 from math import ceil
 from typing import Protocol
 
 try:  # Allows direct imports by the offline test suite.
-    from .exemptions import filter_candidates
+    from .exemptions import is_exempt
 except ImportError:  # pragma: no cover - only used outside the addon package
-    from exemptions import filter_candidates
+    from exemptions import is_exempt
 
-DEFAULT_BATCH_SIZE = 100
-DEFAULT_MAX_REGEX_LENGTH = 8_000
+MAX_SAFE_BATCH_SIZE = 300
+MAX_SAFE_REGEX_LENGTH = 24_000
+DEFAULT_BATCH_SIZE = MAX_SAFE_BATCH_SIZE
+DEFAULT_MAX_REGEX_LENGTH = MAX_SAFE_REGEX_LENGTH
+_REGEX_QUERY_PREFIX = '"re:(?:'
+_REGEX_QUERY_SUFFIX = ')"'
+_REGEX_QUERY_FIXED_LENGTH = len(_REGEX_QUERY_PREFIX) + len(_REGEX_QUERY_SUFFIX)
 
 
 class Note(Protocol):
@@ -102,33 +107,54 @@ def build_regex_query(filenames: Sequence[str]) -> str:
     # Anki's search parser interprets unquoted backslashes itself and rejects
     # regex escapes such as ``\.``.  Quoted ``re:`` input is passed through to
     # the regex engine, preserving the ``re.escape()`` output unchanged.
-    return '"re:(?:' + "|".join(_escaped_filename(filename) for filename in filenames) + ')"'
+    escaped_filenames = (_escaped_filename(filename) for filename in filenames)
+    return _REGEX_QUERY_PREFIX + "|".join(escaped_filenames) + _REGEX_QUERY_SUFFIX
+
+
+def iter_batches(
+    filenames: Iterable[str], config: MatcherConfig = MatcherConfig()
+) -> Iterator[list[str]]:
+    """Yield incrementally sized batches under conservative search ceilings."""
+
+    batch: list[str] = []
+    query_length = _REGEX_QUERY_FIXED_LENGTH
+    batch_size_limit = min(config.batch_size, MAX_SAFE_BATCH_SIZE)
+    query_length_limit = min(config.max_regex_length, MAX_SAFE_REGEX_LENGTH)
+
+    for filename in filenames:
+        escaped_length = len(_escaped_filename(filename))
+        if _REGEX_QUERY_FIXED_LENGTH + escaped_length > query_length_limit:
+            raise ValueError(
+                f"Search term exceeds the effective max_regex_length "
+                f"({query_length_limit:,} characters): {filename!r}"
+            )
+
+        proposed_query_length = query_length + escaped_length + (1 if batch else 0)
+        if batch and (
+            len(batch) >= batch_size_limit
+            or proposed_query_length > query_length_limit
+        ):
+            yield batch
+            batch = []
+            query_length = _REGEX_QUERY_FIXED_LENGTH
+
+        batch.append(filename)
+        query_length += escaped_length + (1 if len(batch) > 1 else 0)
+        if len(batch) >= batch_size_limit:
+            yield batch
+            batch = []
+            query_length = _REGEX_QUERY_FIXED_LENGTH
+
+    if batch:
+        yield batch
 
 
 def build_batches(
     filenames: Iterable[str], config: MatcherConfig = MatcherConfig()
 ) -> list[list[str]]:
-    """Split filenames without exceeding count or conservative query limits."""
+    """Materialize batches for callers that need the complete batch list."""
 
-    batches: list[list[str]] = []
-    batch: list[str] = []
-
-    for filename in filenames:
-        if len(build_regex_query([filename])) > config.max_regex_length:
-            raise ValueError(
-                f"Search term exceeds max_regex_length: {filename!r}"
-            )
-        proposed = [*batch, filename]
-        query_is_too_long = len(build_regex_query(proposed)) > config.max_regex_length
-        if batch and (len(batch) >= config.batch_size or query_is_too_long):
-            batches.append(batch)
-            batch = [filename]
-        else:
-            batch = proposed
-
-    if batch:
-        batches.append(batch)
-    return batches
+    return list(iter_batches(filenames, config))
 
 
 def scan_collection(
@@ -146,24 +172,59 @@ def scan_collection(
     case-sensitive exact substring check.
     """
 
-    media_filenames = tuple(filenames)
-    candidates = tuple(filter_candidates(media_filenames))
-    candidate_terms = {
-        filename: filename_search_terms(filename) for filename in candidates
-    }
-    query_terms = tuple(
-        dict.fromkeys(term for terms in candidate_terms.values() for term in terms)
-    )
-    batches = build_batches(query_terms, config)
+    candidate_names: list[str] = []
+    media_file_count = 0
+    exempted_count = 0
+
+    def unique_search_terms() -> Iterator[str]:
+        nonlocal media_file_count, exempted_count
+        seen_terms: set[str] = set()
+        for filename in filenames:
+            media_file_count += 1
+            if media_file_count % 256 == 0:
+                _raise_if_cancelled(cancelled)
+            if progress and media_file_count % 1_000 == 0:
+                progress(
+                    f"Preparing search terms: {media_file_count} files scanned…"
+                )
+
+            if is_exempt(filename):
+                exempted_count += 1
+                continue
+
+            candidate_names.append(filename)
+            for term in filename_search_terms(filename):
+                if term not in seen_terms:
+                    seen_terms.add(term)
+                    yield term
+
     matched_note_ids: set[int] = set()
-    total_batches = len(batches)
 
-    for index, batch in enumerate(batches, start=1):
+    if progress and (
+        config.batch_size > MAX_SAFE_BATCH_SIZE
+        or config.max_regex_length > MAX_SAFE_REGEX_LENGTH
+    ):
+        progress(
+            "Applying safe query ceilings: "
+            f"{MAX_SAFE_BATCH_SIZE:,} terms / "
+            f"{MAX_SAFE_REGEX_LENGTH:,} query characters per search…"
+        )
+
+    for index, batch in enumerate(
+        iter_batches(unique_search_terms(), config), start=1
+    ):
         _raise_if_cancelled(cancelled)
+        query = build_regex_query(batch)
         if progress:
-            progress(f"Searching batch {index} of {total_batches}…")
-        matched_note_ids.update(int(note_id) for note_id in col.find_notes(build_regex_query(batch)))
+            progress(
+                f"Searching batch {index} ({len(batch):,} terms, "
+                f"{len(query):,} characters)…"
+            )
+        matched_note_ids.update(
+            int(note_id) for note_id in col.find_notes(query)
+        )
 
+    candidates = tuple(candidate_names)
     _raise_if_cancelled(cancelled)
     if progress:
         progress(f"Reading {len(matched_note_ids)} matching notes…")
@@ -179,7 +240,7 @@ def scan_collection(
     for index, filename in enumerate(candidates, start=1):
         _raise_if_cancelled(cancelled)
         normalized_terms = {
-            term.replace("\\", "/") for term in candidate_terms[filename]
+            term.replace("\\", "/") for term in filename_search_terms(filename)
         }
         if not any(term in normalized_raw_text for term in normalized_terms):
             unused.append(filename)
@@ -187,8 +248,8 @@ def scan_collection(
             progress(f"Verifying filenames: {index} of {verification_total}…")
 
     return ScanResult(
-        media_file_count=len(media_filenames),
-        exempted_count=len(media_filenames) - len(candidates),
+        media_file_count=media_file_count,
+        exempted_count=exempted_count,
         candidates=candidates,
         unused=tuple(unused),
         matched_note_count=len(matched_note_ids),
