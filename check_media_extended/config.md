@@ -12,4 +12,6 @@ For example, set `additional_paths` to include audio files in `collection.media/
 }
 ```
 
-Missing or invalid paths are skipped with a warning. Nested unused files appear in the report but cannot be moved through Anki's built-in media trash. A note reference to either the full media-relative path or the filename alone counts as a match.
+Missing or invalid paths are skipped with a warning. Unused files in configured paths can be moved to media trash while preserving their relative folder structure.
+Anki's built-in Restore Trash does not support nested entries, so nested files must be manually moved back to their original paths.
+The add-on's Empty Trash recursively and permanently deletes all trash contents, including nested folders. A note reference to either the full media-relative path or the filename alone counts as a match.

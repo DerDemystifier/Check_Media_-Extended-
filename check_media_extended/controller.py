@@ -6,6 +6,7 @@ import os
 import threading
 from collections.abc import Sequence
 from concurrent.futures import Future
+from pathlib import Path
 from typing import Any
 
 from aqt.operations import QueryOp
@@ -14,8 +15,9 @@ from aqt.utils import askUser, openFolder, showInfo, showWarning
 
 from .media_paths import (
     discover_media_files,
+    empty_media_trash,
     media_trash_directory,
-    root_level_media_filenames,
+    prepare_media_trash_destination,
 )
 from .matcher import MatcherConfig, ScanCancelled, ScanResult, scan_collection
 from .ui import ResultsDialog
@@ -92,27 +94,52 @@ class ExtendedMediaChecker:
 
     def trash_files(self, filenames: Sequence[str]) -> None:
         filenames = list(dict.fromkeys(filenames))
-        root_filenames = root_level_media_filenames(filenames)
-        if len(root_filenames) != len(filenames):
-            showWarning(
-                "Files in additional subfolders are report-only and cannot be "
-                "moved using Anki's media trash.",
-                parent=self.mw,
-            )
-        filenames = root_filenames
         if not filenames:
             return
-        if not askUser(
-            f"Move {len(filenames)} file(s) to Anki's media trash?\n\n"
-            "They can be restored until the media trash is emptied.",
-            parent=self.mw,
-            defaultno=True,
-        ):
+
+        nested_files = [filename for filename in filenames if _is_nested(filename)]
+        confirmation = f"Move {len(filenames)} unused file(s) to Anki's media trash?"
+        if len(nested_files) < len(filenames):
+            confirmation += (
+                "\n\nRoot-level files can be restored with Anki's Restore Trash "
+                "until the trash is emptied."
+            )
+        if nested_files:
+            confirmation += (
+                "\n\nFiles from subfolders will keep their relative paths in the trash. "
+                "Anki's Restore Trash does not support nested entries; restore them "
+                "manually to their original paths before emptying the trash."
+            )
+        confirmation += (
+            "\n\nThe add-on's Empty Trash permanently deletes everything in the trash."
+        )
+        if not askUser(confirmation, parent=self.mw, defaultno=True):
             return
 
-        def trash(col: Any) -> list[str]:
-            col.media.trash_files(filenames)
-            return filenames
+        def trash(col: Any) -> tuple[list[str], list[str]]:
+            media_directory = col.media.dir()
+            moved: list[str] = []
+            warnings: list[str] = []
+            for filename in filenames:
+                try:
+                    relative_filename = filename.replace("\\", "/")
+                    destination = prepare_media_trash_destination(
+                        media_directory, relative_filename
+                    )
+                    source = Path(media_directory).joinpath(
+                        *relative_filename.split("/")
+                    )
+                    col.media.trash_files([relative_filename])
+                    if not source.exists() and destination.is_file():
+                        moved.append(filename)
+                    else:
+                        warnings.append(
+                            f"{filename!r}: Anki did not move the file; it may have "
+                            "disappeared during the operation."
+                        )
+                except Exception as error:
+                    warnings.append(f"{filename!r}: {error}")
+            return moved, warnings
 
         QueryOp(
             parent=self.mw,
@@ -120,14 +147,23 @@ class ExtendedMediaChecker:
             success=self._trashed,
         ).with_progress("Moving media to trash…").run_in_background()
 
-    def _trashed(self, filenames: list[str]) -> None:
-        if self._dialog:
+    def _trashed(self, result: tuple[list[str], list[str]]) -> None:
+        filenames, warnings = result
+        if self._dialog and filenames:
             self._dialog.mark_trashed(filenames)
-        showInfo(
-            f"Moved {len(filenames)} file(s) to Anki's media trash. "
-            "They are recoverable until the trash is emptied.",
-            parent=self.mw,
-        )
+        if filenames:
+            message = f"Moved {len(filenames)} file(s) to Anki's media trash."
+            if any(_is_nested(filename) for filename in filenames):
+                message += (
+                    " Nested files keep their relative paths and must be restored "
+                    "manually before the trash is emptied."
+                )
+            showInfo(message, parent=self.mw)
+        if warnings:
+            showWarning(
+                "Some files could not be moved to trash:\n\n" + "\n".join(warnings),
+                parent=self.mw,
+            )
 
     def open_media_collection(self) -> None:
         openFolder(self.mw.col.media.dir())
@@ -139,7 +175,8 @@ class ExtendedMediaChecker:
 
     def empty_trash(self) -> None:
         if not askUser(
-            "Permanently delete all files in Anki's media trash?\n\n"
+            "Permanently delete everything in this profile's media trash, including "
+            "nested folders and files from previous checks?\n\n"
             "This cannot be undone.",
             parent=self.mw,
             defaultno=True,
@@ -148,7 +185,7 @@ class ExtendedMediaChecker:
 
         QueryOp(
             parent=self.mw,
-            op=lambda col: col.media.empty_trash(),
+            op=lambda col: empty_media_trash(col.media.dir()),
             success=lambda _: showInfo("Anki's media trash has been emptied.", parent=self.mw),
         ).with_progress("Emptying media trash…").run_in_background()
 
@@ -167,3 +204,7 @@ class ExtendedMediaChecker:
             batch_size=int(configured.get("batch_size", 100)),
             max_regex_length=int(configured.get("max_regex_length", 8_000)),
         )
+
+
+def _is_nested(filename: str) -> bool:
+    return "/" in filename or "\\" in filename

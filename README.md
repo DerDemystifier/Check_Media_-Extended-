@@ -31,11 +31,13 @@ Because the add-on looks for filenames in note text rather than interpreting eve
 
 ## What happens to files?
 
-Scanning does not delete or move anything. **Move Root Files to Trash** asks for confirmation and moves unused files in the root of `collection.media` to Anki's media trash. They remain recoverable until you empty that trash. Unused files in additional subfolders are listed in the report only: Anki's built-in media trash does not safely support nested paths.
+Scanning does not delete or move anything. **Move Unused Files to Trash** asks for confirmation and moves unused files from the root and configured subfolders of `collection.media` to Anki's media trash. Nested files keep their relative folder structure there.
+
+Anki's built-in **Restore Trash** does not support nested entries. To recover a nested file, manually move it from the matching path under `media.trash` back to its original relative path under `collection.media` before emptying the trash. The add-on's **Empty Trash** recursively and permanently deletes all contents of `media.trash`, including nested folders and files from previous checks; it cannot be undone. Do not use it until you have manually restored any nested files you want to keep.
 
 - **Open Media Collection** opens the folder containing your collection's media files.
 - **Open Trash Bin** opens Anki's media trash folder.
-- **Empty Trash** permanently deletes everything in Anki's media trash, including files from earlier checks. This cannot be undone.
+- **Empty Trash** recursively and permanently deletes everything in Anki's media trash, including nested contents and files from earlier checks. This cannot be undone.
 
 ## Requirements
 

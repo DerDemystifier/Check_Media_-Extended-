@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 import stat
-from collections.abc import Iterable, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from pathlib import PureWindowsPath
@@ -16,18 +16,6 @@ class MediaFileDiscovery:
 
     filenames: tuple[str, ...]
     warnings: tuple[str, ...]
-
-
-def root_level_media_filenames(filenames: Iterable[str]) -> list[str]:
-    """Return unique root-level names safe to pass to Anki's media trash."""
-
-    return list(
-        dict.fromkeys(
-            filename
-            for filename in filenames
-            if "/" not in filename and "\\" not in filename
-        )
-    )
 
 
 def discover_media_files(
@@ -245,8 +233,123 @@ def _path_warning(configured_path: object, reason: str) -> str:
 
 
 def media_trash_directory(media_directory: str) -> str:
-    """Return Anki's recoverable trash folder beside ``collection.media``."""
+    """Return Anki's media trash folder beside ``collection.media``."""
 
     # Anki's media backend replaces the media directory's name with
     # ``media.trash`` when moving files to recoverable trash.
     return str(Path(media_directory).with_name("media.trash"))
+
+
+def prepare_media_trash_destination(media_directory: str, filename: str) -> Path:
+    """Validate a media-relative file and prepare its mirrored trash path.
+
+    Anki's trash operation creates the trash root, but not nested destination
+    folders. This helper creates the required folders and refuses unsafe paths,
+    symlinks/junctions, missing sources, and destinations that already exist.
+    It does not move the file.
+    """
+
+    parts = _media_relative_path_parts(filename)
+    media_root = Path(media_directory)
+    resolved_media_root = media_root.resolve()
+    if not media_root.is_dir():
+        raise NotADirectoryError(f"Media directory is unavailable: {media_root}")
+
+    source_path = media_root
+    for index, part in enumerate(parts):
+        source_path /= part
+        if _is_link_or_junction(source_path):
+            raise ValueError(f"Media path contains a symlink or junction: {filename!r}")
+        if not _is_within(source_path.resolve(), resolved_media_root):
+            raise ValueError(f"Media path escapes collection.media: {filename!r}")
+        if index < len(parts) - 1:
+            if not source_path.is_dir():
+                raise FileNotFoundError(f"Media directory does not exist: {source_path}")
+        elif not source_path.is_file():
+            raise FileNotFoundError(f"Media file does not exist: {source_path}")
+
+    trash_root = Path(media_trash_directory(media_directory))
+    _ensure_trash_directory(trash_root, trash_root.parent.resolve())
+    resolved_trash_root = trash_root.resolve()
+    destination_parent = trash_root
+    for part in parts[:-1]:
+        destination_parent /= part
+        _ensure_trash_directory(destination_parent, resolved_trash_root)
+
+    destination = destination_parent / parts[-1]
+    if os.path.lexists(destination):
+        raise FileExistsError(f"Trash destination already exists: {destination}")
+    return destination
+
+
+def empty_media_trash(media_directory: str) -> None:
+    """Remove all trash contents recursively without following links.
+
+    The ``media.trash`` directory itself is retained. A linked or non-directory
+    trash root is refused rather than traversed.
+    """
+
+    trash_root = Path(media_trash_directory(media_directory))
+    if not os.path.lexists(trash_root):
+        return
+    if _is_link_or_junction(trash_root):
+        raise ValueError(f"Refusing to empty linked media trash: {trash_root}")
+    if not trash_root.is_dir():
+        raise NotADirectoryError(f"Media trash is not a directory: {trash_root}")
+
+    with os.scandir(trash_root) as entries:
+        children = [Path(entry.path) for entry in entries]
+    for child in children:
+        _remove_trash_entry(child)
+
+
+def _media_relative_path_parts(filename: object) -> tuple[str, ...]:
+    if not isinstance(filename, str):
+        raise ValueError("Media filename must be a relative path string")
+
+    normalized = filename.replace("\\", "/")
+    if (
+        not normalized
+        or normalized.startswith("/")
+        or PureWindowsPath(filename).drive
+        or "\x00" in normalized
+        or ":" in normalized
+    ):
+        raise ValueError(f"Unsafe media-relative path: {filename!r}")
+
+    parts = tuple(normalized.split("/"))
+    if any(part in ("", ".", "..") for part in parts):
+        raise ValueError(f"Unsafe media-relative path: {filename!r}")
+    return parts
+
+
+def _ensure_trash_directory(directory: Path, allowed_root: Path) -> None:
+    if _is_link_or_junction(directory):
+        raise ValueError(f"Trash path contains a symlink or junction: {directory}")
+    if not os.path.lexists(directory):
+        directory.mkdir()
+    elif not directory.is_dir():
+        raise NotADirectoryError(f"Trash path is not a directory: {directory}")
+
+    if not _is_within(directory.resolve(), allowed_root):
+        raise ValueError(f"Trash path escapes its allowed directory: {directory}")
+
+
+def _remove_trash_entry(path: Path) -> None:
+    if _is_link_or_junction(path):
+        # Windows requires rmdir for directory symlinks/junctions; on POSIX,
+        # unlink removes the link itself without touching its target.
+        if os.name == "nt" and path.is_dir():
+            os.rmdir(path)
+        else:
+            path.unlink()
+        return
+
+    if path.is_dir():
+        with os.scandir(path) as entries:
+            children = [Path(entry.path) for entry in entries]
+        for child in children:
+            _remove_trash_entry(child)
+        path.rmdir()
+    else:
+        path.unlink()

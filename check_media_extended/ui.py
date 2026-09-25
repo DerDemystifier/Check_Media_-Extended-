@@ -18,7 +18,6 @@ from aqt.qt import (
     qconnect,
 )
 
-from .media_paths import root_level_media_filenames
 from .matcher import ScanResult
 
 
@@ -72,8 +71,11 @@ class ResultsDialog(QDialog):
 
         if any(_is_nested(filename) for filename in self._filenames):
             self.nested_notice = QLabel(
-                "Nested-folder results are report-only. Anki's media trash "
-                "supports root-level files only."
+                "Nested files can be moved to media.trash with their folder paths "
+                "preserved. Anki's built-in Restore Trash and Empty Trash do not "
+                "support nested entries: restore these files manually to their "
+                "original paths before emptying the trash, using this add-on's "
+                "Empty Trash to remove nested contents."
             )
             self.nested_notice.setWordWrap(True)
             layout.addWidget(self.nested_notice)
@@ -85,7 +87,7 @@ class ResultsDialog(QDialog):
         layout.addWidget(self.report)
 
         buttons = QDialogButtonBox()
-        self.delete_unused = QPushButton("Move Root Files to Trash")
+        self.delete_unused = QPushButton("Move Unused Files to Trash")
         self.open_media = QPushButton("Open Media Collection")
         self.open_trash = QPushButton("Open Trash Bin")
         self.empty_trash = QPushButton("Empty Trash")
@@ -107,7 +109,7 @@ class ResultsDialog(QDialog):
         self._update_delete_button()
 
     def mark_trashed(self, filenames: Sequence[str]) -> None:
-        moved = {filename for filename in filenames if not _is_nested(filename)}
+        moved = set(filenames)
         self._filenames = [filename for filename in self._filenames if filename not in moved]
         self._trashed_count += len(moved)
         self.report.setPlainText("\n".join(self._filenames))
@@ -118,7 +120,7 @@ class ResultsDialog(QDialog):
         self.delete_unused.setEnabled(bool(self._trashable_filenames()))
 
     def _trashable_filenames(self) -> list[str]:
-        return root_level_media_filenames(self._filenames)
+        return list(dict.fromkeys(self._filenames))
 
     def _update_summary(self) -> None:
         listed_bytes = sum(
@@ -135,9 +137,7 @@ class ResultsDialog(QDialog):
             f"({_format_size(listed_bytes)})",
         ]
         if self._trashed_count:
-            parts.append(
-                f"Moved to Anki's recoverable media trash: {self._trashed_count}"
-            )
+            parts.append(f"Moved to media trash: {self._trashed_count}")
         self.summary.setText("<br>".join(parts))
 
 
