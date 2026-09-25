@@ -4,7 +4,7 @@ Find media files in your Anki collection that may no longer be used by any of yo
 
 ## Why use this add-on?
 
-Some notes refer to pictures or audio using Markdown, JavaScript, or custom templates. Anki's regular **Check Media** may not recognize those references. This add-on also looks for filenames in your note text, so it can find media used in those less common ways. It works alongside Anki's regular check and does not change it.
+Some notes refer to pictures or audio using Markdown, JavaScript, or custom templates. Anki's regular **Check Media** may not recognize those references, as it only handles basic `<img>` for images or `[sound:]` for audio, etc... This add-on also looks for filenames in your note text, so it can find media used in those less common ways. It works alongside Anki's regular check and does not change it. If you want a more thorough search, use this addon. Especially built for power users. If you don't know what I'm talking about, this means you haven't faced this problem before, and so this addon is not for you (yet).
 
 ## How to check your media
 

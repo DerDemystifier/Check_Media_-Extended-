@@ -1,4 +1,4 @@
 {
-  "batch_size": 100,
-  "max_regex_length": 8000
+  "batch_size": 250,
+  "max_regex_length": 20000
 }
