@@ -48,9 +48,7 @@ class ExtendedMediaChecker:
     def _scan(self) -> tuple[ScanResult, str, tuple[str, ...]]:
         media_dir = self.mw.col.media.dir()
         configured = self.mw.addonManager.getConfig(__name__) or {}
-        discovery = discover_media_files(
-            media_dir, configured.get("additional_paths", [])
-        )
+        discovery = discover_media_files(media_dir, configured.get("additional_paths", []))
         result = scan_collection(
             self.mw.col,
             discovery.filenames,
@@ -69,9 +67,7 @@ class ExtendedMediaChecker:
         if getattr(self._progress_dialog, "wantCancel", False):
             self._cancelled.set()
 
-    def _finished(
-        self, future: Future[tuple[ScanResult, str, tuple[str, ...]]]
-    ) -> None:
+    def _finished(self, future: Future[tuple[ScanResult, str, tuple[str, ...]]]) -> None:
         self._finish_progress()
         exception = future.exception()
         if isinstance(exception, ScanCancelled):
@@ -110,9 +106,7 @@ class ExtendedMediaChecker:
                 "Anki's Restore Trash does not support nested entries; restore them "
                 "manually to their original paths before emptying the trash."
             )
-        confirmation += (
-            "\n\nThe add-on's Empty Trash permanently deletes everything in the trash."
-        )
+        confirmation += "\n\nThe add-on's Empty Trash permanently deletes everything in the trash."
         if not askUser(confirmation, parent=self.mw, defaultno=True):
             return
 
@@ -126,9 +120,7 @@ class ExtendedMediaChecker:
                     destination = prepare_media_trash_destination(
                         media_directory, relative_filename
                     )
-                    source = Path(media_directory).joinpath(
-                        *relative_filename.split("/")
-                    )
+                    source = Path(media_directory).joinpath(*relative_filename.split("/"))
                     col.media.trash_files([relative_filename])
                     if not source.exists() and destination.is_file():
                         moved.append(filename)
@@ -196,6 +188,7 @@ class ExtendedMediaChecker:
             self._progress_timer = None
         self.mw.progress.finish()
         self._progress_dialog = None
+
 
 def _is_nested(filename: str) -> bool:
     return "/" in filename or "\\" in filename

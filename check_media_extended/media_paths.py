@@ -18,9 +18,7 @@ class MediaFileDiscovery:
     warnings: tuple[str, ...]
 
 
-def discover_media_files(
-    media_directory: str, additional_paths: object = ()
-) -> MediaFileDiscovery:
+def discover_media_files(media_directory: str, additional_paths: object = ()) -> MediaFileDiscovery:
     """List root files plus files below configured media-relative directories.
 
     Additional directories are traversed recursively, but symlinked directories
@@ -41,21 +39,15 @@ def discover_media_files(
                 warnings.add(f"Could not inspect {entry.name}: {error}.")
                 continue
             if not _is_within(resolved_file, media_root):
-                warnings.add(
-                    f"Skipped media file outside collection.media: {entry.name}."
-                )
+                warnings.add(f"Skipped media file outside collection.media: {entry.name}.")
                 continue
             filenames.add(entry.name)
 
-    if isinstance(additional_paths, Sequence) and not isinstance(
-        additional_paths, (str, bytes)
-    ):
+    if isinstance(additional_paths, Sequence) and not isinstance(additional_paths, (str, bytes)):
         configured_paths = additional_paths
     else:
         configured_paths = ()
-        warnings.add(
-            "The additional_paths setting must be a list of relative directories."
-        )
+        warnings.add("The additional_paths setting must be a list of relative directories.")
 
     for configured_path in configured_paths:
         parts, warning = _relative_directory_parts(configured_path)
@@ -71,37 +63,27 @@ def discover_media_files(
             try:
                 if _is_link_or_junction(directory):
                     warnings.add(
-                        _path_warning(
-                            configured_path, "symbolic-link paths are not scanned"
-                        )
+                        _path_warning(configured_path, "symbolic-link paths are not scanned")
                     )
                     invalid_directory = True
                     break
                 resolved_directory = directory.resolve()
                 if not _is_within(resolved_directory, media_root):
                     warnings.add(
-                        _path_warning(
-                            configured_path, "it resolves outside collection.media"
-                        )
+                        _path_warning(configured_path, "it resolves outside collection.media")
                     )
                     invalid_directory = True
                     break
                 if not directory.exists():
-                    warnings.add(
-                        _path_warning(configured_path, "the directory does not exist")
-                    )
+                    warnings.add(_path_warning(configured_path, "the directory does not exist"))
                     invalid_directory = True
                     break
                 if not directory.is_dir():
-                    warnings.add(
-                        _path_warning(configured_path, "the path is not a directory")
-                    )
+                    warnings.add(_path_warning(configured_path, "the path is not a directory"))
                     invalid_directory = True
                     break
             except (OSError, RuntimeError) as error:
-                warnings.add(
-                    _path_warning(configured_path, f"it could not be inspected: {error}")
-                )
+                warnings.add(_path_warning(configured_path, f"it could not be inspected: {error}"))
                 invalid_directory = True
                 break
 
@@ -109,12 +91,8 @@ def discover_media_files(
             continue
 
         def report_walk_error(error: OSError) -> None:
-            relative_error_path = _relative_to_media(
-                error.filename or str(directory), media_root
-            )
-            warnings.add(
-                f"Could not inspect {relative_error_path}: {error.strerror or error}."
-            )
+            relative_error_path = _relative_to_media(error.filename or str(directory), media_root)
+            warnings.add(f"Could not inspect {relative_error_path}: {error.strerror or error}.")
 
         for current_directory, directory_names, file_names in os.walk(
             directory,
@@ -189,14 +167,10 @@ def _relative_directory_parts(
 
     raw_parts = normalized.split("/")
     if ".." in raw_parts:
-        return None, _path_warning(
-            configured_path, "parent-directory traversal is not allowed"
-        )
+        return None, _path_warning(configured_path, "parent-directory traversal is not allowed")
     parts = tuple(part for part in raw_parts if part not in ("", "."))
     if not parts:
-        return None, _path_warning(
-            configured_path, "the media root itself cannot be scanned"
-        )
+        return None, _path_warning(configured_path, "the media root itself cannot be scanned")
     return parts, None
 
 

@@ -88,14 +88,10 @@ class MatcherTests(unittest.TestCase):
         result = scan_collection(col, [filename])
 
         self.assertEqual(result.unused, ())
-        self.assertTrue(
-            any("assets/spanish" in query and "hola" in query for query in col.queries)
-        )
+        self.assertTrue(any("assets/spanish" in query and "hola" in query for query in col.queries))
 
     def test_nested_file_matches_windows_path_separators(self) -> None:
-        col = FakeCollection(
-            {1: FakeNote([r"playCustom('assets\spanish-tts\hola.mp3')"])}, {1}
-        )
+        col = FakeCollection({1: FakeNote([r"playCustom('assets\spanish-tts\hola.mp3')"])}, {1})
 
         result = scan_collection(col, ["assets/spanish-tts/hola.mp3"])
 
@@ -154,17 +150,13 @@ class MatcherTests(unittest.TestCase):
         short_batches = build_batches(short_terms, config)
 
         self.assertTrue(all(len(batch) <= 300 for batch in short_batches))
-        self.assertTrue(
-            all(len(build_regex_query(batch)) <= 24_000 for batch in short_batches)
-        )
+        self.assertTrue(all(len(build_regex_query(batch)) <= 24_000 for batch in short_batches))
 
         long_terms = [f"asset-{index:04d}-{'x' * 100}.png" for index in range(260)]
         long_batches = build_batches(long_terms, config)
 
         self.assertTrue(all(len(batch) < 300 for batch in long_batches))
-        self.assertTrue(
-            all(len(build_regex_query(batch)) <= 24_000 for batch in long_batches)
-        )
+        self.assertTrue(all(len(build_regex_query(batch)) <= 24_000 for batch in long_batches))
 
     def test_search_progress_reports_effective_batch_size(self) -> None:
         progress: list[str] = []
@@ -175,25 +167,16 @@ class MatcherTests(unittest.TestCase):
             progress=progress.append,
         )
 
+        self.assertTrue(any("Applying safe query ceilings" in message for message in progress))
         self.assertTrue(
-            any("Applying safe query ceilings" in message for message in progress)
-        )
-        self.assertTrue(
-            any(
-                message.startswith("Searching batch 1 (300 terms, ")
-                for message in progress
-            )
+            any(message.startswith("Searching batch 1 (300 terms, ") for message in progress)
         )
 
     def test_build_batches_escapes_each_term_once(self) -> None:
         filenames = [f"asset-{index}.png" for index in range(10)]
 
-        with patch.object(
-            matcher, "_escaped_filename", wraps=matcher._escaped_filename
-        ) as escape:
-            batches = build_batches(
-                filenames, MatcherConfig(batch_size=4, max_regex_length=1_000)
-            )
+        with patch.object(matcher, "_escaped_filename", wraps=matcher._escaped_filename) as escape:
+            batches = build_batches(filenames, MatcherConfig(batch_size=4, max_regex_length=1_000))
 
         self.assertEqual([name for batch in batches for name in batch], filenames)
         self.assertEqual(escape.call_count, len(filenames))
@@ -206,9 +189,7 @@ class MatcherTests(unittest.TestCase):
                 consumed.append(index)
                 yield f"asset-{index}.png"
 
-        batches = matcher.iter_batches(
-            terms(), MatcherConfig(batch_size=2, max_regex_length=1_000)
-        )
+        batches = matcher.iter_batches(terms(), MatcherConfig(batch_size=2, max_regex_length=1_000))
 
         self.assertEqual(next(batches), ["asset-0.png", "asset-1.png"])
         self.assertEqual(consumed, [0, 1])
@@ -219,9 +200,8 @@ class MatcherTests(unittest.TestCase):
         original_find_notes = collection.find_notes
         escape_counts_at_search: list[int] = []
 
-        with patch.object(
-            matcher, "_escaped_filename", wraps=matcher._escaped_filename
-        ) as escape:
+        with patch.object(matcher, "_escaped_filename", wraps=matcher._escaped_filename) as escape:
+
             def record_search(query: str) -> list[int]:
                 escape_counts_at_search.append(escape.call_count)
                 return original_find_notes(query)

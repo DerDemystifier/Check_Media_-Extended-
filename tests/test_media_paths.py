@@ -30,9 +30,7 @@ class MediaFileDiscoveryTests(unittest.TestCase):
         (self.media_directory / "unconfigured").mkdir()
         (self.media_directory / "unconfigured" / "ignore.mp3").write_bytes(b"ignore")
 
-        result = discover_media_files(
-            str(self.media_directory), ["assets/spanish-tts"]
-        )
+        result = discover_media_files(str(self.media_directory), ["assets/spanish-tts"])
 
         self.assertEqual(
             result.filenames,
@@ -86,9 +84,7 @@ class MediaFileDiscoveryTests(unittest.TestCase):
 
         for invalid_setting in ("assets", None):
             with self.subTest(invalid_setting=invalid_setting):
-                result = discover_media_files(
-                    str(self.media_directory), invalid_setting
-                )
+                result = discover_media_files(str(self.media_directory), invalid_setting)
 
                 self.assertEqual(result.filenames, ("root.mp3",))
                 self.assertEqual(len(result.warnings), 1)
@@ -114,12 +110,8 @@ class MediaFileDiscoveryTests(unittest.TestCase):
         result = discover_media_files(str(self.media_directory), ["assets"])
 
         self.assertEqual(result.filenames, ())
-        self.assertTrue(
-            any("symlinked media directory" in warning for warning in result.warnings)
-        )
-        self.assertTrue(
-            any("outside collection.media" in warning for warning in result.warnings)
-        )
+        self.assertTrue(any("symlinked media directory" in warning for warning in result.warnings))
+        self.assertTrue(any("outside collection.media" in warning for warning in result.warnings))
 
     def test_rejects_a_configured_symlink_directory(self) -> None:
         external_directory = Path(self._temporary_directory.name) / "external"
@@ -135,10 +127,7 @@ class MediaFileDiscoveryTests(unittest.TestCase):
 
         self.assertEqual(result.filenames, ())
         self.assertTrue(
-            any(
-                "symbolic-link paths are not scanned" in warning
-                for warning in result.warnings
-            )
+            any("symbolic-link paths are not scanned" in warning for warning in result.warnings)
         )
 
 
@@ -173,9 +162,7 @@ class MediaTrashTests(unittest.TestCase):
     def test_prepares_root_file_destination(self) -> None:
         (self.media_directory / "root.mp3").write_bytes(b"audio")
 
-        destination = prepare_media_trash_destination(
-            str(self.media_directory), "root.mp3"
-        )
+        destination = prepare_media_trash_destination(str(self.media_directory), "root.mp3")
 
         self.assertEqual(destination, self.trash_directory / "root.mp3")
         self.assertTrue(self.trash_directory.is_dir())
@@ -193,9 +180,7 @@ class MediaTrashTests(unittest.TestCase):
         ):
             with self.subTest(filename=filename):
                 with self.assertRaises(ValueError):
-                    prepare_media_trash_destination(
-                        str(self.media_directory), filename
-                    )
+                    prepare_media_trash_destination(str(self.media_directory), filename)
         self.assertFalse(self.trash_directory.exists())
 
     def test_refuses_to_overwrite_an_existing_trash_destination(self) -> None:
@@ -208,18 +193,14 @@ class MediaTrashTests(unittest.TestCase):
         destination.write_bytes(b"existing trash")
 
         with self.assertRaises(FileExistsError):
-            prepare_media_trash_destination(
-                str(self.media_directory), "assets/nested.mp3"
-            )
+            prepare_media_trash_destination(str(self.media_directory), "assets/nested.mp3")
 
         self.assertEqual(destination.read_bytes(), b"existing trash")
         self.assertEqual(source.read_bytes(), b"source")
 
     def test_rejects_missing_media_files(self) -> None:
         with self.assertRaises(FileNotFoundError):
-            prepare_media_trash_destination(
-                str(self.media_directory), "assets/missing.mp3"
-            )
+            prepare_media_trash_destination(str(self.media_directory), "assets/missing.mp3")
 
     def test_refuses_symlinked_source_and_trash_directories(self) -> None:
         external_directory = self.profile_directory / "external"
@@ -234,18 +215,14 @@ class MediaTrashTests(unittest.TestCase):
             self.skipTest(f"symlink creation is unavailable: {error}")
 
         with self.assertRaises(ValueError):
-            prepare_media_trash_destination(
-                str(self.media_directory), "assets/linked.mp3"
-            )
+            prepare_media_trash_destination(str(self.media_directory), "assets/linked.mp3")
 
         self.trash_directory.mkdir()
         linked_trash_subdirectory = self.trash_directory / "assets"
         linked_trash_subdirectory.symlink_to(external_directory, target_is_directory=True)
         (self.media_directory / "assets" / "ordinary.mp3").write_bytes(b"ordinary")
         with self.assertRaises(ValueError):
-            prepare_media_trash_destination(
-                str(self.media_directory), "assets/ordinary.mp3"
-            )
+            prepare_media_trash_destination(str(self.media_directory), "assets/ordinary.mp3")
         self.assertEqual(external_file.read_bytes(), b"outside")
 
     def test_empty_trash_recursively_removes_contents_and_keeps_root(self) -> None:

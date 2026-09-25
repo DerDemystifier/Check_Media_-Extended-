@@ -130,10 +130,7 @@ def iter_batches(
             )
 
         proposed_query_length = query_length + escaped_length + (1 if batch else 0)
-        if batch and (
-            len(batch) >= batch_size_limit
-            or proposed_query_length > query_length_limit
-        ):
+        if batch and (len(batch) >= batch_size_limit or proposed_query_length > query_length_limit):
             yield batch
             batch = []
             query_length = _REGEX_QUERY_FIXED_LENGTH
@@ -184,9 +181,7 @@ def scan_collection(
             if media_file_count % 256 == 0:
                 _raise_if_cancelled(cancelled)
             if progress and media_file_count % 1_000 == 0:
-                progress(
-                    f"Preparing search terms: {media_file_count} files scanned…"
-                )
+                progress(f"Preparing search terms: {media_file_count} files scanned…")
 
             if is_exempt(filename):
                 exempted_count += 1
@@ -201,8 +196,7 @@ def scan_collection(
     matched_note_ids: set[int] = set()
 
     if progress and (
-        config.batch_size > MAX_SAFE_BATCH_SIZE
-        or config.max_regex_length > MAX_SAFE_REGEX_LENGTH
+        config.batch_size > MAX_SAFE_BATCH_SIZE or config.max_regex_length > MAX_SAFE_REGEX_LENGTH
     ):
         progress(
             "Applying safe query ceilings: "
@@ -210,28 +204,21 @@ def scan_collection(
             f"{MAX_SAFE_REGEX_LENGTH:,} query characters per search…"
         )
 
-    for index, batch in enumerate(
-        iter_batches(unique_search_terms(), config), start=1
-    ):
+    for index, batch in enumerate(iter_batches(unique_search_terms(), config), start=1):
         _raise_if_cancelled(cancelled)
         query = build_regex_query(batch)
         if progress:
             progress(
-                f"Searching batch {index} ({len(batch):,} terms, "
-                f"{len(query):,} characters)…"
+                f"Searching batch {index} ({len(batch):,} terms, " f"{len(query):,} characters)…"
             )
-        matched_note_ids.update(
-            int(note_id) for note_id in col.find_notes(query)
-        )
+        matched_note_ids.update(int(note_id) for note_id in col.find_notes(query))
 
     candidates = tuple(candidate_names)
     _raise_if_cancelled(cancelled)
     if progress:
         progress(f"Reading {len(matched_note_ids)} matching notes…")
     # Newlines prevent an accidental match across separate fields or notes.
-    raw_text = "\n".join(
-        "\n".join(col.get_note(note_id).fields) for note_id in matched_note_ids
-    )
+    raw_text = "\n".join("\n".join(col.get_note(note_id).fields) for note_id in matched_note_ids)
     normalized_raw_text = raw_text.replace("\\", "/")
 
     unused: list[str] = []
@@ -239,9 +226,7 @@ def scan_collection(
     update_every = max(1, ceil(verification_total / 100))
     for index, filename in enumerate(candidates, start=1):
         _raise_if_cancelled(cancelled)
-        normalized_terms = {
-            term.replace("\\", "/") for term in filename_search_terms(filename)
-        }
+        normalized_terms = {term.replace("\\", "/") for term in filename_search_terms(filename)}
         if not any(term in normalized_raw_text for term in normalized_terms):
             unused.append(filename)
         if progress and (index == verification_total or index % update_every == 0):
