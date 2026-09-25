@@ -38,6 +38,12 @@ class FakeCollection:
 
 
 class MatcherTests(unittest.TestCase):
+    def test_matcher_defaults_use_code_managed_search_limits(self) -> None:
+        config = MatcherConfig()
+
+        self.assertEqual(config.batch_size, 300)
+        self.assertEqual(config.max_regex_length, 24_000)
+
     def test_exemptions_never_become_candidates(self) -> None:
         self.assertEqual(
             filter_candidates(

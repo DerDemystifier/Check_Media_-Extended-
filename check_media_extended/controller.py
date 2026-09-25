@@ -54,7 +54,7 @@ class ExtendedMediaChecker:
         result = scan_collection(
             self.mw.col,
             discovery.filenames,
-            config=self._config(configured),
+            config=MatcherConfig(),
             progress=self._set_progress,
             cancelled=self._cancelled.is_set,
         )
@@ -196,15 +196,6 @@ class ExtendedMediaChecker:
             self._progress_timer = None
         self.mw.progress.finish()
         self._progress_dialog = None
-
-    def _config(self, configured: dict[str, Any] | None = None) -> MatcherConfig:
-        if configured is None:
-            configured = self.mw.addonManager.getConfig(__name__) or {}
-        return MatcherConfig(
-            batch_size=int(configured.get("batch_size", 100)),
-            max_regex_length=int(configured.get("max_regex_length", 8_000)),
-        )
-
 
 def _is_nested(filename: str) -> bool:
     return "/" in filename or "\\" in filename

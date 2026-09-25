@@ -1,14 +1,12 @@
 # Check Media (Extended) configuration
 
-`batch_size` and `max_regex_length` control how note searches are divided into batches. The defaults are 300 terms and 24,000 generated-query characters. For safety, larger configured values are capped at those limits; smaller values are honored. Most users can leave these defaults unchanged.
-
 `additional_paths` is a list of directories to search beneath the active profile's `collection.media` folder. Paths are shared across profiles and must be relative; use forward slashes. Each directory is scanned recursively.
 
 For example, set `additional_paths` to include audio files in `collection.media/assets/spanish-tts` (keep any other settings already in the object):
 
 ```json
 {
-	"additional_paths": ["assets/spanish-tts"]
+    "additional_paths": ["assets/spanish-tts"]
 }
 ```
 
