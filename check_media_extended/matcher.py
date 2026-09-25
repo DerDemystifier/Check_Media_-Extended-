@@ -72,6 +72,28 @@ def _escaped_filename(filename: str) -> str:
     return re.sub(r"(?<!\\)&", r"\\&", escaped)
 
 
+def filename_search_terms(filename: str) -> tuple[str, ...]:
+    """Return query terms for a media-relative filename.
+
+    Nested files can be referenced by their full media-relative path or by
+    basename. Both slash styles are queried so platform-specific card text is
+    included in Anki's prefilter.
+    """
+
+    normalized = filename.replace("\\", "/")
+    if "/" not in normalized:
+        return (normalized,)
+    return tuple(
+        dict.fromkeys(
+            (
+                normalized,
+                normalized.replace("/", "\\"),
+                normalized.rsplit("/", maxsplit=1)[-1],
+            )
+        )
+    )
+
+
 def build_regex_query(filenames: Sequence[str]) -> str:
     """Build one escaped Anki ``re:`` search query for *filenames*."""
 
@@ -92,6 +114,10 @@ def build_batches(
     batch: list[str] = []
 
     for filename in filenames:
+        if len(build_regex_query([filename])) > config.max_regex_length:
+            raise ValueError(
+                f"Search term exceeds max_regex_length: {filename!r}"
+            )
         proposed = [*batch, filename]
         query_is_too_long = len(build_regex_query(proposed)) > config.max_regex_length
         if batch and (len(batch) >= config.batch_size or query_is_too_long):
@@ -122,7 +148,13 @@ def scan_collection(
 
     media_filenames = tuple(filenames)
     candidates = tuple(filter_candidates(media_filenames))
-    batches = build_batches(candidates, config)
+    candidate_terms = {
+        filename: filename_search_terms(filename) for filename in candidates
+    }
+    query_terms = tuple(
+        dict.fromkeys(term for terms in candidate_terms.values() for term in terms)
+    )
+    batches = build_batches(query_terms, config)
     matched_note_ids: set[int] = set()
     total_batches = len(batches)
 
@@ -139,13 +171,17 @@ def scan_collection(
     raw_text = "\n".join(
         "\n".join(col.get_note(note_id).fields) for note_id in matched_note_ids
     )
+    normalized_raw_text = raw_text.replace("\\", "/")
 
     unused: list[str] = []
     verification_total = len(candidates)
     update_every = max(1, ceil(verification_total / 100))
     for index, filename in enumerate(candidates, start=1):
         _raise_if_cancelled(cancelled)
-        if filename not in raw_text:
+        normalized_terms = {
+            term.replace("\\", "/") for term in candidate_terms[filename]
+        }
+        if not any(term in normalized_raw_text for term in normalized_terms):
             unused.append(filename)
         if progress and (index == verification_total or index % update_every == 0):
             progress(f"Verifying filenames: {index} of {verification_total}…")

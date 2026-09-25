@@ -12,7 +12,11 @@ from aqt.operations import QueryOp
 from aqt.qt import QTimer, qconnect
 from aqt.utils import askUser, openFolder, showInfo, showWarning
 
-from .media_paths import media_trash_directory
+from .media_paths import (
+    discover_media_files,
+    media_trash_directory,
+    root_level_media_filenames,
+)
 from .matcher import MatcherConfig, ScanCancelled, ScanResult, scan_collection
 from .ui import ResultsDialog
 
@@ -39,18 +43,20 @@ class ExtendedMediaChecker:
         self._progress_timer.start()
         self.mw.taskman.run_in_background(self._scan, self._finished, uses_collection=True)
 
-    def _scan(self) -> tuple[ScanResult, str]:
+    def _scan(self) -> tuple[ScanResult, str, tuple[str, ...]]:
         media_dir = self.mw.col.media.dir()
-        filenames = [entry.name for entry in os.scandir(media_dir) if entry.is_file()]
-        config = self._config()
+        configured = self.mw.addonManager.getConfig(__name__) or {}
+        discovery = discover_media_files(
+            media_dir, configured.get("additional_paths", [])
+        )
         result = scan_collection(
             self.mw.col,
-            filenames,
-            config=config,
+            discovery.filenames,
+            config=self._config(configured),
             progress=self._set_progress,
             cancelled=self._cancelled.is_set,
         )
-        return result, media_dir
+        return result, media_dir, discovery.warnings
 
     def _set_progress(self, label: str) -> None:
         # TaskManager invokes this worker on a background thread; queue the UI
@@ -61,7 +67,9 @@ class ExtendedMediaChecker:
         if getattr(self._progress_dialog, "wantCancel", False):
             self._cancelled.set()
 
-    def _finished(self, future: Future[tuple[ScanResult, str]]) -> None:
+    def _finished(
+        self, future: Future[tuple[ScanResult, str, tuple[str, ...]]]
+    ) -> None:
         self._finish_progress()
         exception = future.exception()
         if isinstance(exception, ScanCancelled):
@@ -69,7 +77,7 @@ class ExtendedMediaChecker:
         if exception:
             showWarning(str(exception), parent=self.mw)
             return
-        result, media_dir = future.result()
+        result, media_dir, path_warnings = future.result()
         self._dialog = ResultsDialog(
             self.mw,
             result,
@@ -78,11 +86,20 @@ class ExtendedMediaChecker:
             self.open_media_collection,
             self.open_trash_bin,
             self.empty_trash,
+            path_warnings,
         )
         self._dialog.exec()
 
     def trash_files(self, filenames: Sequence[str]) -> None:
         filenames = list(dict.fromkeys(filenames))
+        root_filenames = root_level_media_filenames(filenames)
+        if len(root_filenames) != len(filenames):
+            showWarning(
+                "Files in additional subfolders are report-only and cannot be "
+                "moved using Anki's media trash.",
+                parent=self.mw,
+            )
+        filenames = root_filenames
         if not filenames:
             return
         if not askUser(
@@ -143,8 +160,9 @@ class ExtendedMediaChecker:
         self.mw.progress.finish()
         self._progress_dialog = None
 
-    def _config(self) -> MatcherConfig:
-        configured = self.mw.addonManager.getConfig(__name__) or {}
+    def _config(self, configured: dict[str, Any] | None = None) -> MatcherConfig:
+        if configured is None:
+            configured = self.mw.addonManager.getConfig(__name__) or {}
         return MatcherConfig(
             batch_size=int(configured.get("batch_size", 100)),
             max_regex_length=int(configured.get("max_regex_length", 8_000)),

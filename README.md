@@ -15,11 +15,23 @@ Some notes refer to pictures or audio using Markdown, JavaScript, or custom temp
 
 The add-on checks whether each exact filename appears in the text of any note in your collection. Uppercase and lowercase letters must match. Files whose names start with `_`, as well as Anki-generated LaTeX files, are automatically skipped.
 
+## Search additional media folders
+
+To include files stored in subfolders of `collection.media`, open **Tools → Add-ons**, select **Check Media (Extended)**, and choose **Config**. Set `additional_paths` to a list of paths relative to `collection.media`. For example (keep any other settings already in the object):
+
+```json
+{
+	"additional_paths": ["assets/spanish-tts"]
+}
+```
+
+Configured folders are scanned recursively. Use forward slashes; absolute paths and paths that leave `collection.media` are rejected. This add-on setting is shared across profiles, so each profile uses the same list; a folder missing from the active profile is skipped with a warning. A nested file counts as used if a note mentions its relative path or its basename, so a basename-only reference can conservatively keep same-named files in multiple folders.
+
 Because the add-on looks for filenames in note text rather than interpreting every kind of formatting, a filename mentioned in a note for another reason may count as being used. Treat the results as suggestions and review them before moving any files.
 
 ## What happens to files?
 
-Scanning does not delete or move anything. If you choose **Delete Unused**, Anki asks for confirmation and moves all files in the results list to its media trash. They remain recoverable until you empty that trash.
+Scanning does not delete or move anything. **Move Root Files to Trash** asks for confirmation and moves unused files in the root of `collection.media` to Anki's media trash. They remain recoverable until you empty that trash. Unused files in additional subfolders are listed in the report only: Anki's built-in media trash does not safely support nested paths.
 
 - **Open Media Collection** opens the folder containing your collection's media files.
 - **Open Trash Bin** opens Anki's media trash folder.

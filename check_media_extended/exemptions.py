@@ -14,7 +14,8 @@ LATEX_GENERATED_PREFIX = "latex-"
 def is_exempt(filename: str) -> bool:
     """Return whether *filename* must be excluded from deletion candidates."""
 
-    return filename.startswith("_") or filename.startswith(LATEX_GENERATED_PREFIX)
+    basename = filename.replace("\\", "/").rsplit("/", maxsplit=1)[-1]
+    return basename.startswith("_") or basename.startswith(LATEX_GENERATED_PREFIX)
 
 
 def filter_candidates(filenames: Iterable[str]) -> list[str]:
